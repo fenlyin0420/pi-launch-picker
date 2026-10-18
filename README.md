@@ -30,14 +30,26 @@ pi -e git:github.com/fenlyin0420/pi-launch-picker
 
 ## 启动行为
 
-按优先级依次尝试：
+**每次启动都从 pi 的默认状态开始**：`defaultTools` 决定的默认工具集（含 `codemode`）＋ pi 内置系统提示词。
+保存的 profile 不会被隐式套用——过期的 profile（例如工具集为空、提示词为空的那种）不会再把会话弄成"只剩 `codemode`、没有系统提示词"。
+
+profile 只在明确要求时才生效：
 
 1. CLI flag `--lp-profile <名字>`
-2. 会话记录里的 profile（`/resume` 后仍生效）
-3. profiles 文件里的 `last`（上次用过的）
-4. 以上都没有，且终端是真 TUI → 弹出选择器
+2. 会话内命令 `/lprofile <名字>`、`/lpick`，或快捷键 `ctrl+shift+l`
+3. 想恢复旧行为（自动沿用），在设置里打开 `launchPicker.startup`
 
-也就是说：第一次用会问你一次，之后每次静默沿用上次的选择，想换用 `/lpick` 或 `/lprofile`。
+`launchPicker.startup` 取值：
+
+| 值 | 含义 |
+|---|---|
+| `"default"`（默认） | 每次都从 pi 默认工具集 + 内置提示词开始 |
+| `"session"` | 会话记录里存过 profile 就恢复它（`/resume` 后仍生效），否则默认 |
+| `"last"` | 旧行为：会话记录 > profiles 文件里的 `last` > 真 TUI 时弹选择器 |
+
+```json
+{ "launchPicker": { "startup": "last" } }
+```
 
 ## 命令
 
@@ -78,6 +90,7 @@ pi -e git:github.com/fenlyin0420/pi-launch-picker
 ```
 
 `tools` 省略表示不动工具集，`prompt` 省略表示不动提示词预设。
+`last` 只记录"上次套用过谁"，默认启动不会自动套用它（见“启动行为”）。
 
 ## RPC / app 集成
 

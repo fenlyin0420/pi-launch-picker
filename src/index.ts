@@ -11,10 +11,17 @@
  *   a tool set and a prompt preset.
  *
  * Behavior:
- * - session_start applies, in order: --lp-profile <name> > the profile stored
- *   in the session entry (survives /resume) > "last" from the profiles file.
- *   Only when nothing is saved and the UI is a real terminal does the
- *   interactive picker run: profile -> (optional custom flow) tools -> prompt.
+ * - Every session starts on pi's own defaults: the configured default tool
+ *   selection (`defaultTools`, so `codemode` etc. stay on) and the built-in
+ *   system prompt. No saved profile is applied implicitly — a stale profile
+ *   must never be able to strip a session of its tools and system prompt.
+ * - A profile is applied only when explicitly requested:
+ *   `--lp-profile <name>`, `/lprofile <name>`, `/lpick`, ctrl+shift+l, or the
+ *   `launchPicker.startup` setting ("session" | "last") for people who want the
+ *   old auto-resume behavior.
+ * - In the auto-apply modes, only when nothing is saved and the UI is a real
+ *   terminal does the interactive picker run: profile -> (optional custom flow)
+ *   tools -> prompt.
  *
  * Commands:
  * - /lpick            open the interactive picker
@@ -64,6 +71,23 @@ const CUSTOM_CHOICE = "(new custom…)";
 const PROFILES_FILE = join(getAgentDir(), "launch-profiles.json");
 const PROMPTS_DIR = join(getAgentDir(), "system-prompts");
 
+/**
+ * How a session starts: "default" (pi's own tools + built-in prompt), "session"
+ * (also re-apply the profile recorded in the resumed session) or "last" (also
+ * fall back to the profile file's `last`, the pre-0.2 behavior).
+ */
+type StartupMode = "default" | "session" | "last";
+
+/** `launchPicker.startup` setting; defaults to "default". */
+function readStartupMode(pi: ExtensionAPI): StartupMode {
+	// SAFETY: settings are plain JSON merged from settings files. `launchPicker` is
+	// this extension's own namespace — pi validates none of these keys, so nothing
+	// in the Settings type describes it and only the JSON we read here can be there.
+	const settings = pi.getSettings() as unknown as { launchPicker?: { startup?: unknown } };
+	const raw = settings.launchPicker?.startup;
+	return raw === "session" || raw === "last" ? raw : "default";
+}
+
 class ToolMultiSelect implements Component {
 	private cursor = 0;
 	private scrollTop = 0;
@@ -85,7 +109,7 @@ class ToolMultiSelect implements Component {
 		this.resolve = resolve;
 	}
 
-	render(width: number): string[] {
+	render(_width: number): string[] {
 		const lines: string[] = [];
 		lines.push(this.theme.fg("accent", this.theme.bold("Tools — space: toggle, enter: confirm, esc: cancel")));
 		const total = this.names.length;
@@ -292,16 +316,22 @@ export default function launchPickerExtension(pi: ExtensionAPI) {
 	pi.on("session_start", async (event, ctx) => {
 		profiles = loadProfiles();
 		prompts = loadPrompts();
-		if (event.reason === "startup") initialTools = pi.getActiveTools();
+		// Snapshot pi's own starting state once per process: the configured default
+		// tool selection (`defaultTools`, e.g. read/bash/edit/write + codemode) and the
+		// built-in prompt. That snapshot IS "the defaults" we reset to below.
+		if (initialTools === undefined) initialTools = pi.getActiveTools();
+
+		// Reset to defaults first. A profile saved in an earlier session must never
+		// leak into this one implicitly — otherwise a stale profile (for example one
+		// with an empty tool list and an empty prompt) leaves the app with nothing
+		// but `codemode` and no system prompt. `/reload` keeps the in-session choice.
+		if (event.reason !== "reload") {
+			activeProfile = undefined;
+			activePrompt = undefined;
+			if (initialTools) pi.setActiveTools([...initialTools]);
+		}
 
 		const flag = pi.getFlag("lp-profile");
-		const entries = ctx.sessionManager
-			.getEntries()
-			.filter((e: { type: string; customType?: string }) => e.type === "custom" && e.customType === "launch-state") as Array<{
-			data?: { profile?: string };
-		}>;
-		const entryProfile = entries.pop()?.data?.profile;
-
 		if (typeof flag === "string" && flag) {
 			if (profiles.profiles[flag]) {
 				await applyProfile(flag, ctx);
@@ -309,9 +339,27 @@ export default function launchPickerExtension(pi: ExtensionAPI) {
 			} else {
 				ctx.ui.notify(`--lp-profile: unknown profile "${flag}"`, "error");
 			}
-		} else if (entryProfile && profiles.profiles[entryProfile]) {
+			updateStatus(ctx);
+			return;
+		}
+
+		const startup = readStartupMode(pi);
+		if (startup === "default") {
+			// Explicit opt-in only: --lp-profile, /lprofile, /lpick, ctrl+shift+l.
+			updateStatus(ctx);
+			return;
+		}
+
+		const entries = ctx.sessionManager
+			.getEntries()
+			.filter((e: { type: string; customType?: string }) => e.type === "custom" && e.customType === "launch-state") as Array<{
+			data?: { profile?: string };
+		}>;
+		const entryProfile = entries.pop()?.data?.profile;
+
+		if (entryProfile && profiles.profiles[entryProfile]) {
 			await applyProfile(entryProfile, ctx);
-		} else if (profiles.last && profiles.profiles[profiles.last]) {
+		} else if (startup === "last" && profiles.last && profiles.profiles[profiles.last]) {
 			await applyProfile(profiles.last, ctx);
 		} else if (event.reason === "startup" && ctx.mode === "tui") {
 			await runPicker(ctx);
