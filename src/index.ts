@@ -24,7 +24,7 @@
  *   system prompt. No saved profile is applied implicitly — a stale profile
  *   must never be able to strip a session of its tools and system prompt.
  * - A profile is applied only when explicitly requested:
- *   `--lp-profile <name>`, `/lprofile <name>`, `/lpick`, ctrl+shift+l, or the
+ *   `--lp-profile <name>`, `/pprofile <name>`, `/ppick`, ctrl+shift+l, or the
  *   `launchPicker.startup` setting ("session" | "last") for people who want the
  *   old auto-resume behavior.
  * - In the auto-apply modes, only when nothing is saved and the UI is a real
@@ -32,20 +32,22 @@
  *   tools -> plugins -> skills -> prompt.
  *
  * Commands:
- * - /lpick            open the interactive picker
- * - /lprofile [name]  apply a profile; no argument opens the picker;
- *                     /lprofile (none) clears back to defaults
- * - /lprompt [name]   set the system prompt preset ("(default)", "(empty)",
+ * - /ppick            open the interactive picker
+ * - /pprofile [name]  apply a profile; no argument opens the picker;
+ *                     /pprofile (none) clears back to defaults
+ * - /pprompt [name]   set the system prompt preset ("(default)", "(empty)",
  *                     or a preset name); no argument opens a selector
- * - /ltools <spec>    set active tools: "all", "none", or a csv of tool names;
+ * - /ptools <spec>    set active tools: "all", "none", or a csv of tool names;
  *                     "+name" / "-name" add to or remove from the current set
- * - /lskills <spec>   skill allowlist: "all", "none", or a csv of skill names
+ * - /pskills <spec>   skill allowlist: "all", "none", or a csv of skill names
  *                     (same +name / -name prefixes)
- * - /lplugins <spec>  extension allowlist: "all", "none", or a csv of plugin ids
+ * - /pplugins <spec>  extension allowlist: "all", "none", or a csv of plugin ids
  *                     (same +name / -name prefixes)
- * - /lsave <name>     save current tools + prompt + skills + plugins as a profile
- * - /lstate [prompt]  show session state: active tools, skills, plugins,
+ * - /psave <name>     save current tools + prompt + skills + plugins as a profile
+ * - /pstate [prompt]  show session state: active tools, skills, plugins,
  *                     system prompt (with "prompt" argument: dump full prompt)
+ * - /pexport          write the effective system prompt to
+ *                     ./system-prompt-<YYYYMMDD-HHMMSS>.md in the cwd
  *
  * Shortcut: ctrl+shift+l opens the picker.
  *
@@ -53,11 +55,11 @@
  * - Dialogs degrade to extension_ui_request (select/input), which the app
  *   answers over extension_ui_response.
  * - The app can apply configurations without any dialog, e.g.:
- *     {"type":"prompt","message":"/lprofile clean"}
- *     {"type":"prompt","message":"/ltools read,bash,edit"}
- *     {"type":"prompt","message":"/lprompt research"}
- *     {"type":"prompt","message":"/lskills docx,pdf"}
- *     {"type":"prompt","message":"/lplugins pi-todo,builtin:codemode"}
+ *     {"type":"prompt","message":"/pprofile clean"}
+ *     {"type":"prompt","message":"/ptools read,bash,edit"}
+ *     {"type":"prompt","message":"/pprompt research"}
+ *     {"type":"prompt","message":"/pskills docx,pdf"}
+ *     {"type":"prompt","message":"/pplugins pi-todo,builtin:codemode"}
  */
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -105,6 +107,12 @@ function parseList(entries: readonly string[]): ListSpec {
 interface ProfilesFile {
 	last?: string;
 	profiles: Record<string, Profile>;
+}
+
+/** Local-time stamp for exported files: `YYYYMMDD-HHMMSS`. */
+function timestampLabel(date: Date): string {
+	const pad = (value: number) => String(value).padStart(2, "0");
+	return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
 }
 
 const DEFAULT_PROMPT = "(default)";
@@ -356,7 +364,7 @@ export default function launchPickerExtension(pi: ExtensionAPI) {
 			ctx.ui.notify(`${at}unknown tools: ${unknown.join(", ")}`, "warning");
 		}
 		if (blocked.length > 0) {
-			ctx.ui.notify(`${at}tools from disabled plugins skipped: ${blocked.join(", ")} — see /lplugins`, "warning");
+			ctx.ui.notify(`${at}tools from disabled plugins skipped: ${blocked.join(", ")} — see /pplugins`, "warning");
 		}
 		if (spec.mode === "absolute") return adds.filter((name) => known.has(name) && toolAllowed(name));
 		const next = new Set(pi.getActiveTools());
@@ -524,7 +532,7 @@ export default function launchPickerExtension(pi: ExtensionAPI) {
 				ctx.ui.notify(`Unknown skills: ${unknown.join(", ")}`, "warning");
 			}
 			if (blocked.length > 0) {
-				ctx.ui.notify(`Skills from disabled plugins skipped: ${blocked.join(", ")} — see /lplugins`, "warning");
+				ctx.ui.notify(`Skills from disabled plugins skipped: ${blocked.join(", ")} — see /pplugins`, "warning");
 			}
 			if (spec.mode === "absolute") {
 				activeSkills = adds.filter((name) => known.has(name));
@@ -708,7 +716,7 @@ export default function launchPickerExtension(pi: ExtensionAPI) {
 		const owner = command.sourceInfo.source;
 		if (!isPackageSource(owner) || pluginSelected(owner)) return;
 		ctx.ui.notify(
-			`/${head} belongs to the disabled plugin "${owner}". Enable it in the profile (/lplugins) to use it.`,
+			`/${head} belongs to the disabled plugin "${owner}". Enable it in the profile (/pplugins) to use it.`,
 			"warning",
 		);
 		return { action: "handled" };
@@ -748,7 +756,7 @@ export default function launchPickerExtension(pi: ExtensionAPI) {
 
 		const startup = readStartupMode(pi);
 		if (startup === "default") {
-			// Explicit opt-in only: --lp-profile, /lprofile, /lpick, ctrl+shift+l.
+			// Explicit opt-in only: --lp-profile, /pprofile, /ppick, ctrl+shift+l.
 			updateStatus(ctx);
 			return;
 		}
@@ -788,15 +796,15 @@ export default function launchPickerExtension(pi: ExtensionAPI) {
 		},
 	});
 
-	pi.registerCommand("lpick", {
+	pi.registerCommand("ppick", {
 		description: "Open the launch picker (profile, tools, plugins, skills, system prompt)",
 		handler: async (_args, ctx) => {
 			await runPicker(ctx);
 		},
 	});
 
-	pi.registerCommand("lprofile", {
-		description: "Apply a launch profile: /lprofile <name>; no argument opens the picker; (none) clears",
+	pi.registerCommand("pprofile", {
+		description: "Apply a launch profile: /pprofile <name>; no argument opens the picker; (none) clears",
 		handler: async (args, ctx) => {
 			profiles = loadProfiles();
 			prompts = loadPrompts();
@@ -814,8 +822,8 @@ export default function launchPickerExtension(pi: ExtensionAPI) {
 		},
 	});
 
-	pi.registerCommand("lprompt", {
-		description: `Set the system prompt preset: /lprompt <name> ("${DEFAULT_PROMPT}", "${EMPTY_PROMPT}", or a preset); no argument opens a selector`,
+	pi.registerCommand("pprompt", {
+		description: `Set the system prompt preset: /pprompt <name> ("${DEFAULT_PROMPT}", "${EMPTY_PROMPT}", or a preset); no argument opens a selector`,
 		handler: async (args, ctx) => {
 			prompts = loadPrompts();
 			const name = args?.trim();
@@ -828,12 +836,12 @@ export default function launchPickerExtension(pi: ExtensionAPI) {
 		},
 	});
 
-	pi.registerCommand("ltools", {
-		description: 'Set active tools: /ltools all | none | <tool1,tool2,...>; "+name" / "-name" add to or remove from the current set',
+	pi.registerCommand("ptools", {
+		description: 'Set active tools: /ptools all | none | <tool1,tool2,...>; "+name" / "-name" add to or remove from the current set',
 		handler: async (args, ctx) => {
 			const spec = args?.trim();
 			if (!spec) {
-				ctx.ui.notify('Usage: /ltools all | none | read,bash,edit | +todo,-bash', "warning");
+				ctx.ui.notify('Usage: /ptools all | none | read,bash,edit | +todo,-bash', "warning");
 				return;
 			}
 			const all = visibleTools();
@@ -859,16 +867,16 @@ export default function launchPickerExtension(pi: ExtensionAPI) {
 		},
 	});
 
-	pi.registerCommand("lskills", {
+	pi.registerCommand("pskills", {
 		description:
-			'Set the skill allowlist: /lskills all | none | <skill1,skill2,...>; "+name" / "-name" add or remove entries; no argument opens a selector',
+			'Set the skill allowlist: /pskills all | none | <skill1,skill2,...>; "+name" / "-name" add or remove entries; no argument opens a selector',
 		handler: async (args, ctx) => {
 			const spec = args?.trim();
 			if (!spec) {
 				const names = availableSkills().map((skill) => skill.name);
 				if (ctx.mode !== "tui") {
 					const current = activeSkills === undefined ? `all (${names.join(", ") || "none"})` : activeSkills.join(", ") || "(none)";
-					ctx.ui.notify(`Skills: ${current}. Usage: /lskills all | none | <skill1,skill2,...> | +docx,-pdf`, "info");
+					ctx.ui.notify(`Skills: ${current}. Usage: /pskills all | none | <skill1,skill2,...> | +docx,-pdf`, "info");
 					return;
 				}
 				const selected = await pickMany(
@@ -900,9 +908,9 @@ export default function launchPickerExtension(pi: ExtensionAPI) {
 		},
 	});
 
-	pi.registerCommand("lplugins", {
+	pi.registerCommand("pplugins", {
 		description:
-			'Set the extension allowlist: /lplugins all | none | <id1,id2,...>; "+name" / "-name" add or remove entries; disabled plugins lose their tools, packaged skills and prompt templates',
+			'Set the extension allowlist: /pplugins all | none | <id1,id2,...>; "+name" / "-name" add or remove entries; disabled plugins lose their tools, packaged skills and prompt templates',
 		handler: async (args, ctx) => {
 			const spec = args?.trim();
 			if (!spec) {
@@ -912,7 +920,7 @@ export default function launchPickerExtension(pi: ExtensionAPI) {
 						activePlugins === undefined
 							? `all (${available.join(", ") || "none"})`
 							: available.filter((id) => activePlugins?.some((wanted) => pluginMatches(id, wanted))).join(", ") || "(none)";
-					ctx.ui.notify(`Plugins: ${current}. Usage: /lplugins all | none | <id1,id2,...> | +pi-todo,-pi-lens`, "info");
+					ctx.ui.notify(`Plugins: ${current}. Usage: /pplugins all | none | <id1,id2,...> | +pi-todo,-pi-lens`, "info");
 					return;
 				}
 				const selected = await pickMany(
@@ -1008,7 +1016,7 @@ export default function launchPickerExtension(pi: ExtensionAPI) {
 		].join("\n");
 	}
 
-	pi.registerCommand("lstate", {
+	pi.registerCommand("pstate", {
 		description: "Show session state: tools, skills, plugins, system prompt (argument 'prompt' dumps the full prompt)",
 		handler: async (args, ctx) => {
 			profiles = loadProfiles();
@@ -1023,12 +1031,29 @@ export default function launchPickerExtension(pi: ExtensionAPI) {
 		},
 	});
 
-	pi.registerCommand("lsave", {
+	pi.registerCommand("pexport", {
+		description: "Write the current system prompt to ./system-prompt-<timestamp>.md",
+		handler: async (_args, ctx) => {
+			profiles = loadProfiles();
+			prompts = loadPrompts();
+			const text = effectivePrompt(ctx);
+			const file = join(process.cwd(), `system-prompt-${timestampLabel(new Date())}.md`);
+			try {
+				writeFileSync(file, text);
+			} catch (err) {
+				ctx.ui.notify(`Failed to save system prompt to ${file}: ${err}`, "error");
+				return;
+			}
+			ctx.ui.notify(`System prompt saved (${text.length} chars): ${file}`, "info");
+		},
+	});
+
+	pi.registerCommand("psave", {
 		description: "Save the current tools, system prompt, skills and plugins as a named profile",
 		handler: async (args, ctx) => {
 			const name = args?.trim();
 			if (!name) {
-				ctx.ui.notify("Usage: /lsave <name>", "warning");
+				ctx.ui.notify("Usage: /psave <name>", "warning");
 				return;
 			}
 			profiles = loadProfiles();

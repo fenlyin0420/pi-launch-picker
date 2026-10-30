@@ -39,7 +39,7 @@ pi -e git:github.com/fenlyin0420/pi-launch-picker
 profile 只在明确要求时才生效：
 
 1. CLI flag `--lp-profile <名字>`
-2. 会话内命令 `/lprofile <名字>`、`/lpick`，或快捷键 `ctrl+shift+l`
+2. 会话内命令 `/pprofile <名字>`、`/ppick`，或快捷键 `ctrl+shift+l`
 3. 想恢复旧行为（自动沿用），在设置里打开 `launchPicker.startup`
 
 `launchPicker.startup` 取值：
@@ -58,14 +58,15 @@ profile 只在明确要求时才生效：
 
 | 命令 | 作用 |
 |---|---|
-| `/lpick` | 打开交互式选择器（profile → 工具多选 → 插件多选 → 技能多选 → 提示词预设） |
-| `/lprofile [名字]` | 套用 profile 并持久化为 `last`；不带参数开选择器；`(none)` 清除回默认 |
-| `/lprompt [名字]` | 切换系统提示词预设；不带参数开选择器 |
-| `/ltools <spec>` | 设定激活工具：`all` / `none` / `read,bash,edit` 这样的逗号列表；`+todo,-bash` 相对当前状态增删 |
-| `/lskills <spec>` | 设定技能白名单：`all` / `none` / `docx,pdf`；`+pdf,-docx` 相对当前状态增删；不带参数在 TUI 开多选 |
-| `/lplugins <spec>` | 设定插件白名单：`all` / `none` / `pi-lens,builtin:codemode`；`-pi-lens` 相对当前状态增删；不带参数在 TUI 开多选 |
-| `/lsave <名字>` | 把当前工具集 + 提示词 + 技能 + 插件存成 profile |
-| `/lstate [prompt]` | 查看当前状态：工具数、技能生效数、插件白名单、提示词预设与字符数；带 `prompt` 输出提示词全文 |
+| `/ppick` | 打开交互式选择器（profile → 工具多选 → 插件多选 → 技能多选 → 提示词预设） |
+| `/pprofile [名字]` | 套用 profile 并持久化为 `last`；不带参数开选择器；`(none)` 清除回默认 |
+| `/pprompt [名字]` | 切换系统提示词预设；不带参数开选择器 |
+| `/ptools <spec>` | 设定激活工具：`all` / `none` / `read,bash,edit` 这样的逗号列表；`+todo,-bash` 相对当前状态增删 |
+| `/pskills <spec>` | 设定技能白名单：`all` / `none` / `docx,pdf`；`+pdf,-docx` 相对当前状态增删；不带参数在 TUI 开多选 |
+| `/pplugins <spec>` | 设定插件白名单：`all` / `none` / `pi-lens,builtin:codemode`；`-pi-lens` 相对当前状态增删；不带参数在 TUI 开多选 |
+| `/psave <名字>` | 把当前工具集 + 提示词 + 技能 + 插件存成 profile |
+| `/pstate [prompt]` | 查看当前状态：工具数、技能生效数、插件白名单、提示词预设与字符数；带 `prompt` 输出提示词全文 |
+| `/pexport` | 把当前生效的系统提示词写到工作目录，文件名 `system-prompt-<YYYYMMDD-HHMMSS>.md` |
 
 快捷键 `ctrl+shift+l` 打开选择器。
 
@@ -94,7 +95,7 @@ profile 只在明确要求时才生效：
 
 | 贡献物 | 处理 |
 |---|---|
-| 工具 | 不进入激活集，`/ltools` 也设不上 |
+| 工具 | 不进入激活集，`/ptools` 也设不上 |
 | 包内 skill | 不广告，`/skill:<名字>` 被拦截并提示 |
 | 包内提示词模板 | `/模板名` 被拦截并提示 |
 | 工具自带的 prompt guideline | 随工具一起消失，因为它只对激活工具生效 |
@@ -117,7 +118,7 @@ pi-launch-picker                            （本地扩展文件或目录名）
 | 写法 | 结果 |
 |---|---|
 | `tools` 里写了被禁插件的工具 | 该工具不激活；应用 profile 时 warning `tools from disabled plugins skipped: …` |
-| `skills` 里写了被禁插件的包内 skill | 不广告；warning `Skills from disabled plugins skipped: …`。名字仍保留在白名单里，之后 `/lplugins all` 重新启用该插件，它会自动恢复 |
+| `skills` 里写了被禁插件的包内 skill | 不广告；warning `Skills from disabled plugins skipped: …`。名字仍保留在白名单里，之后 `/pplugins all` 重新启用该插件，它会自动恢复 |
 | `extensions` 省略，但之前已有白名单生效 | 沿用之前那份白名单（"省略 = 不动"），新 profile 的 skills 同样受它限制 |
 
 状态栏显示 `skills:生效/名单`（两者相同时省略分母）和 `plugins:数量`。
@@ -128,7 +129,7 @@ pi-launch-picker                            （本地扩展文件或目录名）
 - **扩展命令拦不住**：pi 先执行 extension command，再进 `input` 钩子，所以被禁插件的 `/命令` 仍可用；能拦的只有 skill 命令和提示词模板。
 - **扩展注入的 prompt section 无法归属**：扩展通过 `before_agent_start` 往 system prompt 加的 section 不带来源，因此不会被剔除。
 - **本地 skill 没有插件来源**：`~/.agents/skills/`、`.agents/skills/` 等非包安装的 skill 只能用 `skills` 白名单控制。
-- **打开白名单不会恢复工具**：`/lplugins all` 只解除限制，之前被剔除的工具需要 `/ltools` 重新选择。
+- **打开白名单不会恢复工具**：`/pplugins all` 只解除限制，之前被剔除的工具需要 `/ptools` 重新选择。
 
 ## Profile 文件
 
@@ -173,19 +174,20 @@ pi-launch-picker                            （本地扩展文件或目录名）
 - 结果是「全部」时收敛成默认值：剩余 skill 等于全部就存成"全部"，剩余插件等于全部就存成"不限制"。
 - 同一个列表里混用普通名字和 `+`/`-` 条目视为歧义：整个 profile 不套用并报错，会话状态保持原样。
 - 增删仍受 `extensions` 白名单约束：被禁插件的工具/skill 加不进来（warning），`-` 一个不存在的名字也只 warning。
-- `/lsave` 永远写绝对列表：套用相对 profile 后再保存，得到的是当时状态的完整快照。
+- `/psave` 永远写绝对列表：套用相对 profile 后再保存，得到的是当时状态的完整快照。
 
 ## RPC / app 集成
 
 命令本身就是普通的 slash command，通过 RPC 的 `prompt` 消息即可调用：
 
 ```json
-{"type":"prompt","message":"/ltools none"}
-{"type":"prompt","message":"/lprompt (empty)"}
-{"type":"prompt","message":"/lskills docx,pdf"}
-{"type":"prompt","message":"/lplugins pi-todo,builtin:codemode"}
-{"type":"prompt","message":"/lsave chat"}
-{"type":"prompt","message":"/lstate"}
+{"type":"prompt","message":"/ptools none"}
+{"type":"prompt","message":"/pprompt (empty)"}
+{"type":"prompt","message":"/pskills docx,pdf"}
+{"type":"prompt","message":"/pplugins pi-todo,builtin:codemode"}
+{"type":"prompt","message":"/psave chat"}
+{"type":"prompt","message":"/pstate"}
+{"type":"prompt","message":"/pexport"}
 ```
 
 执行结果以 notify 形式返回（`extension_ui_request` 的 `method: "notify"`）。
@@ -193,7 +195,7 @@ pi-launch-picker                            （本地扩展文件或目录名）
 注意：
 
 - 命令要作为整条消息发送，斜杠命令才会被拦截执行。
-- `ui.select` / `ui.input` 对话框会降级成 `extension_ui_request`，由客户端回 `extension_ui_response`；但工具、插件、技能多选用的是 `ui.custom`，非 TUI 环境取不到，应改用 `/ltools` + `/lplugins` + `/lskills` + `/lprompt` + `/lsave` 组合。
+- `ui.select` / `ui.input` 对话框会降级成 `extension_ui_request`，由客户端回 `extension_ui_response`；但工具、插件、技能多选用的是 `ui.custom`，非 TUI 环境取不到，应改用 `/ptools` + `/pplugins` + `/pskills` + `/pprompt` + `/psave` 组合。
 - 想要启动即干净：`pi --mode rpc --lp-profile clean`，全程无对话框。
 
 ## 与内置 flag 的关系
