@@ -12,13 +12,13 @@
 ## 安装
 
 ```bash
-pi install git:github.com/fenlyin0420/pi-launch-picker
+pi install npm:@fenlyin/pi-launch-picker
 ```
 
 或临时试用一次，不写入设置：
 
 ```bash
-pi -e git:github.com/fenlyin0420/pi-launch-picker
+pi -e npm:@fenlyin/pi-launch-picker
 ```
 
 ## 它管什么
